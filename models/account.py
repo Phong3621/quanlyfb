@@ -8,7 +8,7 @@ class Account:
     """Model tài khoản Facebook"""
     
     def __init__(self, uid: str = "", name: str = "", cookie: dict = None,
-                 email: str = "", password: str = "", note: str = ""):
+                 email: str = "", password: str = "", note: str = "", proxy: str = ""):
         self.id: Optional[int] = None
         self.uid = uid
         self.name = name
@@ -21,6 +21,7 @@ class Account:
         self.created_at = datetime.now().isoformat()
         self.proxy_id: Optional[int] = None
         self.session_file: Optional[str] = None
+        self.proxy = proxy
     
     @property
     def encrypted_password(self) -> str:
@@ -60,7 +61,8 @@ class Account:
             'is_live': 1 if self.is_live else 0,
             'last_checked': self.last_checked,
             'proxy_id': self.proxy_id,
-            'session_file': self.session_file
+            'session_file': self.session_file,
+            'proxy': self.proxy
         }
     
     @staticmethod
@@ -79,6 +81,7 @@ class Account:
         acc.created_at = row['created_at']
         acc.proxy_id = row['proxy_id']
         acc.session_file = row['session_file']
+        acc.proxy = row['proxy'] if 'proxy' in row.keys() else ""
         return acc
     
     def save(self) -> int:
@@ -88,20 +91,20 @@ class Account:
                 UPDATE accounts SET
                     uid = ?, name = ?, cookie = ?, email = ?,
                     encrypted_password = ?, note = ?, is_live = ?,
-                    last_checked = ?, proxy_id = ?, session_file = ?
+                    last_checked = ?, proxy_id = ?, session_file = ?, proxy = ?
                 WHERE id = ?
             '''
-            params = (data['uid'], data['name'], data['cookie'], data['email'], data['encrypted_password'], data['note'], data['is_live'], data['last_checked'], data['proxy_id'], data['session_file'], self.id)
+            params = (data['uid'], data['name'], data['cookie'], data['email'], data['encrypted_password'], data['note'], data['is_live'], data['last_checked'], data['proxy_id'], data['session_file'], data['proxy'], self.id)
             db.execute_update(query, params)
             return self.id
         else:
             query = '''
                 INSERT INTO accounts 
                 (uid, name, cookie, email, encrypted_password, note, 
-                 is_live, last_checked, proxy_id, session_file)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 is_live, last_checked, proxy_id, session_file, proxy)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             '''
-            params = (data['uid'], data['name'], data['cookie'], data['email'], data['encrypted_password'], data['note'], data['is_live'], data['last_checked'], data['proxy_id'], data['session_file'])
+            params = (data['uid'], data['name'], data['cookie'], data['email'], data['encrypted_password'], data['note'], data['is_live'], data['last_checked'], data['proxy_id'], data['session_file'], data['proxy'])
             self.id = db.execute_update(query, params)
             return self.id
     

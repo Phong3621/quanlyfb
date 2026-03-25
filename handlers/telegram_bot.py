@@ -82,7 +82,7 @@ class TelegramBotHandler:
             [InlineKeyboardButton("🗑 Xóa DIE", callback_data="clean"), InlineKeyboardButton("🗑 Xóa UID", callback_data="del_uid")],
             [InlineKeyboardButton("📁 Export CSV", callback_data="export")],
             [InlineKeyboardButton("🍪 Lấy Cookie", callback_data="get_cookie"), InlineKeyboardButton("ℹ️ Lấy Info", callback_data="get_info")],
-            [InlineKeyboardButton("🔑 Lấy Token", callback_data="get_token_btn")]
+            [InlineKeyboardButton("🔑 Lấy Token", callback_data="get_token_btn"), InlineKeyboardButton("🖼 Đổi Avatar", callback_data="change_avatar")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
@@ -197,16 +197,24 @@ class TelegramBotHandler:
         uid = args[0]
         acc = await asyncio.to_thread(self.manager.get_account_by_uid, uid)
         if acc:
+            msg = await update.effective_message.reply_text(f"🔄 Đang lấy thông tin chi tiết và Token cho `{uid}`...", parse_mode='Markdown')
+            token = await asyncio.to_thread(get_token_from_cookie, acc.cookie_string)
+            token_str = token if token else "Không lấy được"
             info_text = (
                 f"✅ *THÔNG TIN TÀI KHOẢN*\n\n"
                 f"📌 *UID:* `{acc.uid}`\n"
                 f"👤 *Tên:* `{acc.name}`\n"
                 f"📧 *TK:* `{acc.email}`\n"
                 f"🔑 *MK:* `{acc.password}`\n"
-                f"📝 *Note/2FA:* `{acc.note}`\n\n"
-                f"🍪 *Cookie:*\n`{acc.cookie_string}`"
+                f"📝 *Note/2FA:* `{acc.note}`\n"
+                f"🔑 *Token:*\n`{token_str}`\n"
             )
-            await update.effective_message.reply_text(info_text, parse_mode='Markdown')
+            
+            if acc.proxy:
+                info_text += f"🌐 *Proxy:* `{acc.proxy}`\n"
+                
+            info_text += f"\n🍪 *Cookie:*\n`{acc.cookie_string}`"
+            await msg.edit_text(info_text, parse_mode='Markdown')
         else:
             await update.effective_message.reply_text(f"❌ Không tìm thấy tài khoản với UID: `{uid}`", parse_mode='Markdown')
 
@@ -405,7 +413,7 @@ class TelegramBotHandler:
             uid = self.waiting_avatar[user_id]
             del self.waiting_avatar[user_id]
         else:
-            # Không có caption /avatar và cũng không ở trạng thái chờ ảnh
+            await update.effective_message.reply_text("⚠️ Bot đã nhận được ảnh nhưng không biết bạn muốn đổi avatar cho UID nào.\n👉 Vui lòng dùng lệnh `/avatar <uid>` trước, hoặc gửi ảnh kèm caption `/avatar <uid>`.", parse_mode='Markdown')
             return
             
         acc = await asyncio.to_thread(self.manager.get_account_by_uid, uid)
@@ -413,26 +421,33 @@ class TelegramBotHandler:
             await update.effective_message.reply_text(f"❌ Không tìm thấy tài khoản với UID: `{uid}`", parse_mode='Markdown')
             return
 
-            photo = update.effective_message.photo[-1]
-            file = await context.bot.get_file(photo.file_id)
-            avatar_path = f"avatar_{uid}.jpg"
-            await file.download_to_drive(avatar_path)
-
-            msg = await update.effective_message.reply_text(f"🔄 Đang tự động cập nhật avatar cho UID `{uid}`...\n_Quá trình này chạy ngầm qua trình duyệt và có thể mất 1-2 phút..._", parse_mode='Markdown')
+        if update.effective_message.photo:
+            file_id = update.effective_message.photo[-1].file_id
+        elif update.effective_message.document:
+            file_id = update.effective_message.document.file_id
+        else:
+            return
             
-            try:
-                from services.avatar_updater import run_update_avatar
-                success = await asyncio.to_thread(run_update_avatar, acc.cookie_string, avatar_path, True, 3)
-                
-                if success:
-                    await msg.edit_text(f"✅ Đã CẬP NHẬT AVATAR thành công cho UID: `{uid}`!", parse_mode='Markdown')
-                else:
-                    await msg.edit_text(f"❌ Cập nhật avatar thất bại cho UID: `{uid}`. Vui lòng thử lại sau.", parse_mode='Markdown')
-            except Exception as e:
-                await msg.edit_text(f"❌ Lỗi xử lý cập nhật avatar: {str(e)}")
-            finally:
-                if os.path.exists(avatar_path):
-                    os.remove(avatar_path)
+        file = await context.bot.get_file(file_id)
+        # Tạo đường dẫn tuyệt đối để trình duyệt chắc chắn tìm thấy tệp
+        avatar_path = os.path.abspath(f"avatar_{uid}.jpg")
+        await file.download_to_drive(avatar_path)
+
+        msg = await update.effective_message.reply_text(f"🔄 Đang tự động cập nhật avatar cho UID `{uid}`...\n_Quá trình này chạy ngầm qua trình duyệt và có thể mất 1-2 phút..._", parse_mode='Markdown')
+        
+        try:
+            from services.avatar_updater import run_update_avatar
+            success = await asyncio.to_thread(run_update_avatar, acc.cookie_string, avatar_path, False, 3)
+            
+            if success:
+                await msg.edit_text(f"✅ Đã CẬP NHẬT AVATAR thành công cho UID: `{uid}`!", parse_mode='Markdown')
+            else:
+                await msg.edit_text(f"❌ Cập nhật avatar thất bại cho UID: `{uid}`. Vui lòng thử lại sau.", parse_mode='Markdown')
+        except Exception as e:
+            await msg.edit_text(f"❌ Lỗi xử lý cập nhật avatar: {str(e)}")
+        finally:
+            if os.path.exists(avatar_path):
+                os.remove(avatar_path)
 
     @admin_only
     async def button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -469,6 +484,11 @@ class TelegramBotHandler:
                 "📝 Lấy Token bằng lệnh:\n`/token <uid>`",
                 parse_mode='Markdown'
             )
+        elif query.data == "change_avatar":
+            await update.effective_message.reply_text(
+                "🖼 Đổi Avatar bằng lệnh:\n`/avatar <uid>`\nSau đó bot sẽ yêu cầu bạn gửi ảnh để cập nhật.",
+                parse_mode='Markdown'
+            )
     
     def run(self):
         self.application = Application.builder().token(self.token).post_init(self.post_init).build()
@@ -488,7 +508,7 @@ class TelegramBotHandler:
         self.application.add_handler(CommandHandler("avatar", self.avatar_cmd))
         self.application.add_handler(CallbackQueryHandler(self.button_callback))
         self.application.add_handler(MessageHandler(filters.Document.FileExtension("txt"), self.handle_document))
-        self.application.add_handler(MessageHandler(filters.PHOTO, self.handle_photo))
+        self.application.add_handler(MessageHandler(filters.PHOTO | filters.Document.IMAGE, self.handle_photo))
         
         print("🤖 Telegram Bot PRO đang chạy...")
         self.application.run_polling()

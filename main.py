@@ -126,9 +126,28 @@ def main():
                 password = input("Password (Enter để bỏ qua): ").strip()
                 note = input("Ghi chú (Enter để bỏ qua): ").strip()
             
+            proxy_str = ""
+            use_proxy = input("\n🌐 Gắn proxy cho tài khoản này? (y/N): ").strip().lower()
+            if use_proxy == 'y':
+                print("Chọn loại Proxy:")
+                print("1. HTTP/HTTPS")
+                print("2. SOCKS5")
+                p_type = input("👉 Chọn (1/2): ").strip()
+                prefix = "socks5://" if p_type == "2" else "http://"
+                p_val = input("Nhập proxy (định dạng ip:port hoặc ip:port:user:pass): ").strip()
+                if p_val:
+                    parts = p_val.split(':')
+                    if len(parts) == 4:
+                        proxy_str = f"{prefix}{parts[2]}:{parts[3]}@{parts[0]}:{parts[1]}"
+                    elif len(parts) == 2:
+                        proxy_str = f"{prefix}{parts[0]}:{parts[1]}"
+                    else:
+                        print("⚠️ Định dạng proxy không chuẩn, lưu dạng raw.")
+                        proxy_str = f"{prefix}{p_val}"
+
             print("🔄 Đang xử lý lấy UID & Tên từ Facebook...")
             try:
-                acc = manager.add_account_from_cookie(cookie_str, email, password, note)
+                acc = manager.add_account_from_cookie(cookie_str, email, password, note, proxy_str)
                 print(f"✅ Thêm thành công: {acc.uid} - {acc.name}")
             except Exception as e:
                 print(f"❌ Lỗi: {str(e)}")
@@ -176,12 +195,19 @@ def main():
             uid = input("Nhập UID cần xem thông tin: ").strip()
             acc = manager.get_account_by_uid(uid)
             if acc:
+                print("🔄 Đang lấy thông tin chi tiết và Token...")
+                from handlers.telegram_bot import get_token_from_cookie
+                token = get_token_from_cookie(acc.cookie_string)
+                token_str = token if token else "Không lấy được"
                 print(f"\n✅ THÔNG TIN TÀI KHOẢN:")
                 print(f"📌 UID: {acc.uid}")
                 print(f"👤 Tên: {acc.name}")
                 print(f"📧 TK: {acc.email}")
                 print(f"🔑 MK: {acc.password}")
                 print(f"📝 Note/2FA: {acc.note}")
+                print(f"🔑 Token:\n{token_str}")
+                if acc.proxy:
+                    print(f"🌐 Proxy: {acc.proxy}")
                 print(f"🍪 Cookie:\n{acc.cookie_string}")
             else:
                 print(f"\n❌ Không tìm thấy tài khoản với UID: {uid}")
@@ -198,6 +224,25 @@ def main():
                 secret_2fa = parts[2] if len(parts) >= 3 else ""
                 note = f"2FA: {secret_2fa}" if secret_2fa else ""
                 
+                proxy_str = ""
+                use_proxy = input("\n🌐 Gắn proxy cho tài khoản này? (y/N): ").strip().lower()
+                if use_proxy == 'y':
+                    print("Chọn loại Proxy:")
+                    print("1. HTTP/HTTPS")
+                    print("2. SOCKS5")
+                    p_type = input("👉 Chọn (1/2): ").strip()
+                    prefix = "socks5://" if p_type == "2" else "http://"
+                    p_val = input("Nhập proxy (định dạng ip:port hoặc ip:port:user:pass): ").strip()
+                    if p_val:
+                        parts = p_val.split(':')
+                        if len(parts) == 4:
+                            proxy_str = f"{prefix}{parts[2]}:{parts[3]}@{parts[0]}:{parts[1]}"
+                        elif len(parts) == 2:
+                            proxy_str = f"{prefix}{parts[0]}:{parts[1]}"
+                        else:
+                            print("⚠️ Định dạng proxy không chuẩn, lưu dạng raw.")
+                            proxy_str = f"{prefix}{p_val}"
+
                 try:
                     from services.auto_login import run_auto_login
                     cookies_list, uid, name = run_auto_login(email, password, secret_2fa)
@@ -207,10 +252,13 @@ def main():
                         acc = manager.get_account_by_uid(uid)
                         if acc:
                             print(f"\n⚠️ Tài khoản {uid} đã tồn tại trong hệ thống. Đang cập nhật cookie...")
-                            manager.update_account(acc.id, cookie=cookie_dict, name=name, email=email, password=password, note=note)
+                            update_kwargs = dict(cookie=cookie_dict, name=name, email=email, password=password, note=note)
+                            if proxy_str:
+                                update_kwargs['proxy'] = proxy_str
+                            manager.update_account(acc.id, **update_kwargs)
                             print("✅ Đã cập nhật dữ liệu thành công!")
                         else:
-                            acc = manager.add_account(uid, cookie_dict, name, email, password, note)
+                            acc = manager.add_account(uid, cookie_dict, name, email, password, note, proxy_str)
                             print(f"\n✅ Đã thêm tài khoản mới thành công: {acc.uid} - {acc.name}")
                     else:
                         print("\n❌ Đăng nhập thất bại hoặc tài khoản đã bị checkpoint nặng!")

@@ -133,7 +133,7 @@ class AccountManager:
         return None
 
     def add_account(self, uid: str, cookie: dict, name: str, 
-                    email: str = "", password: str = "", note: str = "") -> Account:
+                    email: str = "", password: str = "", note: str = "", proxy: str = "") -> Account:
         """Thêm tài khoản mới"""
         if self.get_account_by_uid(uid):
             raise ValueError(f"Tài khoản UID {uid} đã tồn tại trong hệ thống!")
@@ -144,14 +144,15 @@ class AccountManager:
             cookie=cookie, 
             email=email, 
             password=password, 
-            note=note
+            note=note,
+            proxy=proxy
         )
         acc.save()
         self.refresh_cache()
         return acc
 
     def add_account_from_cookie(self, cookie_string: str, email: str = "", 
-                                 password: str = "", note: str = "") -> Account:
+                                 password: str = "", note: str = "", proxy: str = "") -> Account:
         """
         Thêm tài khoản từ cookie string
         Tự động lấy UID và tên từ cookie
@@ -184,7 +185,7 @@ class AccountManager:
             if fallback_name:
                 name = fallback_name
                 
-        return self.add_account(uid, cookie_dict, name, email, password, note)
+        return self.add_account(uid, cookie_dict, name, email, password, note, proxy)
 
     def update_account(self, acc_id: int, **kwargs) -> bool:
         """Cập nhật thông tin tài khoản"""

@@ -25,10 +25,15 @@ class Database:
                 last_checked TEXT,
                 created_at TEXT,
                 proxy_id INTEGER,
-                session_file TEXT
+                session_file TEXT,
+                proxy TEXT
             )
         '''
         self.execute_update(query)
+        try:
+            self.execute_update("ALTER TABLE accounts ADD COLUMN proxy TEXT")
+        except Exception:
+            pass
 
     def execute_query(self, query, params=()):
         with self._get_connection() as conn:
