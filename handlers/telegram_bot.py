@@ -51,6 +51,7 @@ class TelegramBotHandler:
         self.token = token
         self.admin_chat_id = admin_chat_id
         self.application = None
+        self.waiting_avatar = {}
 
     async def post_init(self, application: Application):
         from telegram import BotCommand
@@ -66,7 +67,8 @@ class TelegramBotHandler:
             BotCommand("info", "Xem thông tin chi tiết tài khoản"),
             BotCommand("cookie", "Lấy Cookie theo UID"),
             BotCommand("token", "Lấy Token theo UID"),
-            BotCommand("export", "Xuất danh sách ra file CSV")
+            BotCommand("export", "Xuất danh sách ra file CSV"),
+            BotCommand("avatar", "Đổi avatar (nhập lệnh trước, gửi ảnh sau)")
         ]
         await application.bot.set_my_commands(commands)
     
@@ -110,6 +112,8 @@ class TelegramBotHandler:
             "🔹 `/cookie <uid>` - Lấy Cookie theo UID\n"
             "🔹 `/token <uid>` - Lấy Token theo UID\n"
             "🔹 `/export` - Xuất file CSV\n"
+            "🔹 `/avatar <uid>` - Đổi Avatar FB (Bot sẽ yêu cầu gửi ảnh)\n"
+            "   _(Hoặc: Gửi Ảnh kèm caption `/avatar <uid>`)_\n"
         )
         await update.effective_message.reply_text(help_text, parse_mode='Markdown')
     
@@ -369,6 +373,68 @@ class TelegramBotHandler:
             await update.effective_message.reply_text(f"❌ Không tìm thấy tài khoản với UID: `{uid}`", parse_mode='Markdown')
 
     @admin_only
+    async def avatar_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        args = context.args
+        if not args:
+            await update.effective_message.reply_text("❌ Vui lòng nhập:\n`/avatar <uid>`", parse_mode='Markdown')
+            return
+            
+        uid = args[0]
+        acc = await asyncio.to_thread(self.manager.get_account_by_uid, uid)
+        if not acc:
+            await update.effective_message.reply_text(f"❌ Không tìm thấy tài khoản với UID: `{uid}`", parse_mode='Markdown')
+            return
+            
+        self.waiting_avatar[update.effective_user.id] = uid
+        await update.effective_message.reply_text(f"📸 Vui lòng gửi một bức ảnh để làm avatar cho tài khoản `{uid}`.\n_(Gửi ảnh bình thường, không cần chọn 'gửi dưới dạng file')_", parse_mode='Markdown')
+
+    @admin_only
+    async def handle_photo(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_id = update.effective_user.id
+        caption = update.effective_message.caption or ""
+        uid = None
+        
+        if caption.startswith("/avatar"):
+            parts = caption.split()
+            if len(parts) >= 2:
+                uid = parts[1]
+            else:
+                await update.effective_message.reply_text("❌ Vui lòng nhập UID tài khoản trong caption.\n👉 VD: Gửi ảnh kèm caption: `/avatar <uid>`", parse_mode='Markdown')
+                return
+        elif user_id in self.waiting_avatar:
+            uid = self.waiting_avatar[user_id]
+            del self.waiting_avatar[user_id]
+        else:
+            # Không có caption /avatar và cũng không ở trạng thái chờ ảnh
+            return
+            
+        acc = await asyncio.to_thread(self.manager.get_account_by_uid, uid)
+        if not acc:
+            await update.effective_message.reply_text(f"❌ Không tìm thấy tài khoản với UID: `{uid}`", parse_mode='Markdown')
+            return
+
+            photo = update.effective_message.photo[-1]
+            file = await context.bot.get_file(photo.file_id)
+            avatar_path = f"avatar_{uid}.jpg"
+            await file.download_to_drive(avatar_path)
+
+            msg = await update.effective_message.reply_text(f"🔄 Đang tự động cập nhật avatar cho UID `{uid}`...\n_Quá trình này chạy ngầm qua trình duyệt và có thể mất 1-2 phút..._", parse_mode='Markdown')
+            
+            try:
+                from services.avatar_updater import run_update_avatar
+                success = await asyncio.to_thread(run_update_avatar, acc.cookie_string, avatar_path, True, 3)
+                
+                if success:
+                    await msg.edit_text(f"✅ Đã CẬP NHẬT AVATAR thành công cho UID: `{uid}`!", parse_mode='Markdown')
+                else:
+                    await msg.edit_text(f"❌ Cập nhật avatar thất bại cho UID: `{uid}`. Vui lòng thử lại sau.", parse_mode='Markdown')
+            except Exception as e:
+                await msg.edit_text(f"❌ Lỗi xử lý cập nhật avatar: {str(e)}")
+            finally:
+                if os.path.exists(avatar_path):
+                    os.remove(avatar_path)
+
+    @admin_only
     async def button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
         await query.answer()
@@ -419,8 +485,10 @@ class TelegramBotHandler:
         self.application.add_handler(CommandHandler("info", self.info_cmd))
         self.application.add_handler(CommandHandler("cookie", self.cookie_cmd))
         self.application.add_handler(CommandHandler("token", self.token_cmd))
+        self.application.add_handler(CommandHandler("avatar", self.avatar_cmd))
         self.application.add_handler(CallbackQueryHandler(self.button_callback))
         self.application.add_handler(MessageHandler(filters.Document.FileExtension("txt"), self.handle_document))
+        self.application.add_handler(MessageHandler(filters.PHOTO, self.handle_photo))
         
         print("🤖 Telegram Bot PRO đang chạy...")
         self.application.run_polling()
