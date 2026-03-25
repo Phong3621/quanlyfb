@@ -64,6 +64,9 @@ def main():
         print("6. 🍪 Lấy Cookie theo UID")
         print("7. 📊 Thống kê")
         print("8. 📁 Export CSV")
+        print("9. 🗑 Xóa tài khoản theo UID")
+        print("10. ℹ️ Xem thông tin tài khoản (UID, Pass, Cookie...)")
+        print("11. 🤖 Auto Đăng nhập & Lấy Cookie (UID|PASS|2FA)")
         print("0. ❌ Thoát")
         print("=" * 50)
         
@@ -88,15 +91,40 @@ def main():
         
         elif choice == "3":
             print("\n--- ➕ THÊM TÀI KHOẢN TỪ COOKIE ---")
-            cookie_str = input("Nhập Cookie FB: ").strip()
-            if not cookie_str:
-                print("❌ Cookie không được để trống!")
+            input_str = input("Nhập Cookie FB (hoặc định dạng TK|MK|Cookie|2FA): ").strip()
+            if not input_str:
+                print("❌ Dữ liệu không được để trống!")
                 input("⏎ Nhấn Enter...")
                 continue
                 
-            email = input("Email (Enter để bỏ qua): ").strip()
-            password = input("Password (Enter để bỏ qua): ").strip()
-            note = input("Ghi chú (Enter để bỏ qua): ").strip()
+            email = ""
+            password = ""
+            note = ""
+            cookie_str = input_str
+            
+            if "|" in input_str:
+                parts = [p.strip() for p in input_str.split("|") if p.strip()]
+                cookie_idx = -1
+                for i, p in enumerate(parts):
+                    if "c_user=" in p:
+                        cookie_idx = i
+                        break
+                
+                if cookie_idx != -1:
+                    cookie_str = parts[cookie_idx]
+                    parts.pop(cookie_idx)
+                elif parts:
+                    cookie_str = max(parts, key=len)
+                    parts.remove(cookie_str)
+                    
+                if len(parts) > 0: email = parts[0]
+                if len(parts) > 1: password = parts[1]
+                if len(parts) > 2: note = "2FA: " + parts[2] if len(parts) == 3 else " | ".join(parts[2:])
+                print(f"👉 Đã nhận diện: TK={email}, MK={password}")
+            else:
+                email = input("Email (Enter để bỏ qua): ").strip()
+                password = input("Password (Enter để bỏ qua): ").strip()
+                note = input("Ghi chú (Enter để bỏ qua): ").strip()
             
             print("🔄 Đang xử lý lấy UID & Tên từ Facebook...")
             try:
@@ -133,6 +161,67 @@ def main():
         elif choice == "8":
             filename = manager.export_to_csv()
             input("⏎ Nhấn Enter...")
+            
+        elif choice == "9":
+            uid_to_del = input("Nhập UID cần xóa: ").strip()
+            if uid_to_del:
+                success = manager.delete_account_by_uid(uid_to_del)
+                if success:
+                    print(f"✅ Đã xóa thành công tài khoản có UID: {uid_to_del}")
+                else:
+                    print(f"❌ Không tìm thấy tài khoản với UID: {uid_to_del}")
+            input("⏎ Nhấn Enter...")
+            
+        elif choice == "10":
+            uid = input("Nhập UID cần xem thông tin: ").strip()
+            acc = manager.get_account_by_uid(uid)
+            if acc:
+                print(f"\n✅ THÔNG TIN TÀI KHOẢN:")
+                print(f"📌 UID: {acc.uid}")
+                print(f"👤 Tên: {acc.name}")
+                print(f"📧 TK: {acc.email}")
+                print(f"🔑 MK: {acc.password}")
+                print(f"📝 Note/2FA: {acc.note}")
+                print(f"🍪 Cookie:\n{acc.cookie_string}")
+            else:
+                print(f"\n❌ Không tìm thấy tài khoản với UID: {uid}")
+            input("\n⏎ Nhấn Enter...")
+            
+        elif choice == "11":
+            print("\n--- 🤖 AUTO ĐĂNG NHẬP & LẤY COOKIE ---")
+            input_data = input("👉 Nhập định dạng (UID|PASS|2FA): ").strip()
+            parts = [p.strip() for p in input_data.split("|") if p.strip()]
+            
+            if len(parts) >= 2:
+                email = parts[0]
+                password = parts[1]
+                secret_2fa = parts[2] if len(parts) >= 3 else ""
+                note = f"2FA: {secret_2fa}" if secret_2fa else ""
+                
+                try:
+                    from services.auto_login import run_auto_login
+                    cookies_list, uid, name = run_auto_login(email, password, secret_2fa)
+                    if uid:
+                        cookie_dict = {c['name']: c['value'] for c in cookies_list}
+                        
+                        acc = manager.get_account_by_uid(uid)
+                        if acc:
+                            print(f"\n⚠️ Tài khoản {uid} đã tồn tại trong hệ thống. Đang cập nhật cookie...")
+                            manager.update_account(acc.id, cookie=cookie_dict, name=name, email=email, password=password, note=note)
+                            print("✅ Đã cập nhật dữ liệu thành công!")
+                        else:
+                            acc = manager.add_account(uid, cookie_dict, name, email, password, note)
+                            print(f"\n✅ Đã thêm tài khoản mới thành công: {acc.uid} - {acc.name}")
+                    else:
+                        print("\n❌ Đăng nhập thất bại hoặc tài khoản đã bị checkpoint nặng!")
+                except ImportError:
+                    print("\n❌ Lỗi: Bạn chưa cài đặt thư viện cần thiết cho chức năng này.")
+                    print("👉 Vui lòng chạy lệnh: pip install playwright pyotp && playwright install chromium")
+                except Exception as e:
+                    print(f"\n❌ Lỗi xử lý: {str(e)}")
+            else:
+                print("\n❌ Định dạng không hợp lệ! Yêu cầu: UID|PASS hoặc UID|PASS|2FA")
+            input("\n⏎ Nhấn Enter...")
             
         elif choice == "0":
             print("👋 Tạm biệt!")
