@@ -150,16 +150,20 @@ def click_save(page):
     return False
 
 # ===== MAIN EXPORT FOR BOT =====
-def run_update_avatar(cookie_string, avatar_path, headless_mode=True, max_retries=3):
+def run_update_avatar(cookie_string, avatar_path, headless_mode=True, max_retries=3, proxy=None):
     if not os.path.exists(avatar_path):
         print(f"❌ Không tìm thấy ảnh: {avatar_path}")
         return False
         
+    launch_args = []
+    if proxy:
+        launch_args.append(f'--proxy-server={proxy}')
+
     for attempt in range(max_retries):
         print(f"\n🔄 Thử nghiệm lần {attempt + 1}/{max_retries}")
         try:
             with sync_playwright() as p:
-                browser = p.chromium.launch(headless=headless_mode, slow_mo=100)
+                browser = p.chromium.launch(headless=headless_mode, slow_mo=100, args=launch_args)
                 context = browser.new_context(
                     user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36"
                 )

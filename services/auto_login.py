@@ -137,9 +137,14 @@ def get_account_info(page, cookies):
     return uid, name
 
 # ================== RUN AUTO LOGIN ==================
-def run_auto_login(email, password, secret_2fa=None):
+def run_auto_login(email, password, secret_2fa=None, proxy=None):
+    launch_args = ["--disable-blink-features=AutomationControlled"]
+    if proxy:
+        launch_args.append(f'--proxy-server={proxy}')
+        print(f"🔄 Sử dụng proxy: {proxy}")
+
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False, args=["--disable-blink-features=AutomationControlled"])
+        browser = p.chromium.launch(headless=False, args=launch_args)
         context = browser.new_context()
         page = context.new_page()
         print("🌐 Đang mở Facebook...")

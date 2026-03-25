@@ -9,7 +9,7 @@ from services.uid_checker import UIDChecker
 
 # ==================== HELPER FUNCTIONS ====================
 
-def get_name_html(uid: str, cookie_string: str = None) -> str:
+def get_name_html(uid: str, cookie_string: str = None, proxy: str = None) -> str:
     """
     Lấy tên từ UID qua HTML scraping
     Hỗ trợ cookie để tăng độ chính xác
@@ -25,7 +25,8 @@ def get_name_html(uid: str, cookie_string: str = None) -> str:
         if cookie_string:
             headers["Cookie"] = cookie_string
             
-        response = requests.get(url, headers=headers, timeout=10, allow_redirects=True)
+        proxies = {"http": proxy, "https": proxy} if proxy else None
+        response = requests.get(url, headers=headers, proxies=proxies, timeout=10, allow_redirects=True)
         
         # Cách 1: Lấy từ <title>
         match = re.search(r"<title>(.*?)</title>", response.text, re.IGNORECASE)
@@ -78,7 +79,7 @@ def extract_uid_from_cookie(cookie_string: str) -> str:
     
     return None
 
-def get_name_with_cookie(uid: str, cookie_string: str) -> str:
+def get_name_with_cookie(uid: str, cookie_string: str, proxy: str = None) -> str:
     """
     Lấy tên bằng cookie (qua mbasic.facebook.com)
     Ổn định hơn phương pháp không cookie
@@ -90,7 +91,8 @@ def get_name_with_cookie(uid: str, cookie_string: str) -> str:
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         }
         
-        response = requests.get('https://mbasic.facebook.com/me', headers=headers, timeout=10)
+        proxies = {"http": proxy, "https": proxy} if proxy else None
+        response = requests.get('https://mbasic.facebook.com/me', headers=headers, proxies=proxies, timeout=10)
         
         if response.status_code == 200:
             match = re.search(r'<title>(.*?)</title>', response.text, re.IGNORECASE)
@@ -99,11 +101,11 @@ def get_name_with_cookie(uid: str, cookie_string: str) -> str:
                 if not any(x in title for x in ["Đăng nhập", "Log in", "Facebook", "Error", "Lỗi", "Not Found"]):
                     return re.sub(r'^\([0-9+]+\)\s*', '', title).replace(" | Facebook", "").strip()
         
-        return get_name_html(uid, cookie_string)
+        return get_name_html(uid, cookie_string, proxy)
         
     except Exception as e:
         print(f"Lỗi lấy tên với cookie: {e}")
-        return get_name_html(uid, cookie_string)
+        return get_name_html(uid, cookie_string, proxy)
 
 
 # ==================== ACCOUNT MANAGER CLASS ====================
@@ -162,7 +164,7 @@ class AccountManager:
             raise ValueError("Không tìm thấy c_user (UID) trong cookie!")
         
         # Kiểm tra trạng thái LIVE trước khi thêm
-        if not UIDChecker.check_live(uid):
+        if not UIDChecker.check_live(uid, proxy):
             raise ValueError(f"Tài khoản UID {uid} đã DIE, từ chối thêm!")
             
         cookie_dict = {}
@@ -173,15 +175,15 @@ class AccountManager:
                 
         name = uid  # fallback
         try:
-            name_from_cookie = get_name_with_cookie(uid, cookie_string)
+            name_from_cookie = get_name_with_cookie(uid, cookie_string, proxy)
             if name_from_cookie:
                 name = name_from_cookie
             else:
-                fallback_name = get_name_html(uid)
+                fallback_name = get_name_html(uid, proxy=proxy)
                 if fallback_name:
                     name = fallback_name
         except Exception as e:
-            fallback_name = get_name_html(uid)
+            fallback_name = get_name_html(uid, proxy=proxy)
             if fallback_name:
                 name = fallback_name
                 
@@ -258,7 +260,7 @@ class AccountManager:
         use_proxy: có dùng proxy hay không (cần cài proxy manager)
         """
         def _check_acc(acc):
-            proxy = None
+            proxy = acc.proxy if use_proxy else None
             status = UIDChecker.check_live(acc.uid, proxy)
             
             if status is not None and acc.is_live != status:
@@ -278,7 +280,8 @@ class AccountManager:
         if not acc:
             return False
         
-        is_live = UIDChecker.check_live(uid, None)
+        proxy = acc.proxy if use_proxy else None
+        is_live = UIDChecker.check_live(uid, proxy)
         acc.is_live = is_live
         acc.last_checked = datetime.now().isoformat()
         acc.save()
