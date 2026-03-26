@@ -136,15 +136,30 @@ def get_account_info(page, cookies):
             print(f"⚠️ Lỗi lấy tên: {e}")
     return uid, name
 
+# ================== PLAYWRIGHT PROXY PARSER ==================
+def parse_playwright_proxy(proxy_str):
+    if not proxy_str: return None
+    import urllib.parse
+    try:
+        if not proxy_str.startswith(('http://', 'https://', 'socks5://')):
+            proxy_str = 'http://' + proxy_str
+        parsed = urllib.parse.urlparse(proxy_str)
+        res = {"server": f"{parsed.scheme}://{parsed.hostname}:{parsed.port}"}
+        if parsed.username: res["username"] = parsed.username
+        if parsed.password: res["password"] = parsed.password
+        return res
+    except:
+        return {"server": proxy_str}
+
 # ================== RUN AUTO LOGIN ==================
 def run_auto_login(email, password, secret_2fa=None, proxy=None):
     launch_args = ["--disable-blink-features=AutomationControlled"]
+    pw_proxy = parse_playwright_proxy(proxy)
     if proxy:
-        launch_args.append(f'--proxy-server={proxy}')
         print(f"🔄 Sử dụng proxy: {proxy}")
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False, args=launch_args)
+        browser = p.chromium.launch(headless=False, args=launch_args, proxy=pw_proxy)
         context = browser.new_context()
         page = context.new_page()
         print("🌐 Đang mở Facebook...")

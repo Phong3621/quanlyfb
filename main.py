@@ -67,6 +67,7 @@ def main():
         print("9. 🗑 Xóa tài khoản theo UID")
         print("10. ℹ️ Xem thông tin tài khoản (UID, Pass, Cookie...)")
         print("11. 🤖 Auto Đăng nhập & Lấy Cookie (UID|PASS|2FA)")
+        print("12. 🔧 Gán/Đổi Proxy cho tài khoản")
         print("0. ❌ Thoát")
         print("=" * 50)
         
@@ -197,7 +198,7 @@ def main():
             if acc:
                 print("🔄 Đang lấy thông tin chi tiết và Token...")
                 from handlers.telegram_bot import get_token_from_cookie
-                token = get_token_from_cookie(acc.cookie_string)
+                token = get_token_from_cookie(acc.cookie_string, acc.proxy)
                 token_str = token if token else "Không lấy được"
                 print(f"\n✅ THÔNG TIN TÀI KHOẢN:")
                 print(f"📌 UID: {acc.uid}")
@@ -269,6 +270,46 @@ def main():
                     print(f"\n❌ Lỗi xử lý: {str(e)}")
             else:
                 print("\n❌ Định dạng không hợp lệ! Yêu cầu: UID|PASS hoặc UID|PASS|2FA")
+            input("\n⏎ Nhấn Enter...")
+            
+        elif choice == "12":
+            print("\n--- 🔧 GÁN/ĐỔI PROXY CHO TÀI KHOẢN ---")
+            uid = input("Nhập UID của tài khoản cần gán proxy: ").strip()
+            acc = manager.get_account_by_uid(uid)
+            
+            if not acc:
+                print(f"❌ Không tìm thấy tài khoản với UID: {uid}")
+                input("\n⏎ Nhấn Enter...")
+                continue
+
+            print(f"✅ Tài khoản: {acc.uid} - {acc.name}")
+            print(f"🌐 Proxy hiện tại: {acc.proxy if acc.proxy else 'Không có'}")
+
+            proxy_str = ""
+            print("\nChọn loại Proxy mới:")
+            print("1. HTTP/HTTPS")
+            print("2. SOCKS5")
+            print("0. Xóa Proxy")
+            p_type = input("👉 Chọn (1/2/0): ").strip()
+
+            if p_type == '0':
+                proxy_str = ""
+                print("✅ Sẽ xóa proxy khỏi tài khoản.")
+            elif p_type in ['1', '2']:
+                prefix = "socks5://" if p_type == "2" else "http://"
+                p_val = input("Nhập proxy mới (định dạng ip:port hoặc ip:port:user:pass): ").strip()
+                if p_val:
+                    parts = p_val.split(':')
+                    if len(parts) == 4: # ip:port:user:pass
+                        proxy_str = f"{prefix}{parts[2]}:{parts[3]}@{parts[0]}:{parts[1]}"
+                    elif len(parts) == 2: # ip:port
+                        proxy_str = f"{prefix}{parts[0]}:{parts[1]}"
+                    else:
+                        proxy_str = f"{prefix}{p_val}"
+            
+            manager.update_account(acc.id, proxy=proxy_str)
+            print(f"\n✅ Đã cập nhật proxy thành công cho UID {uid}!")
+            print(f"   Proxy mới: {proxy_str if proxy_str else 'Đã xóa'}")
             input("\n⏎ Nhấn Enter...")
             
         elif choice == "0":
