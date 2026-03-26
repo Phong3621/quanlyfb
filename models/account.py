@@ -2,7 +2,6 @@ import json
 from datetime import datetime
 from typing import Optional, Dict
 from utils.crypto import crypto
-from utils.database import db
 
 class Account:
     """Model tài khoản Facebook"""
@@ -84,7 +83,7 @@ class Account:
         acc.proxy = row['proxy'] if 'proxy' in row.keys() else ""
         return acc
     
-    def save(self) -> int:
+    def save(self, db_instance) -> int:
         data = self.to_dict()
         if self.id:
             query = '''
@@ -95,7 +94,7 @@ class Account:
                 WHERE id = ?
             '''
             params = (data['uid'], data['name'], data['cookie'], data['email'], data['encrypted_password'], data['note'], data['is_live'], data['last_checked'], data['proxy_id'], data['session_file'], data['proxy'], self.id)
-            db.execute_update(query, params)
+            db_instance.execute_update(query, params)
             return self.id
         else:
             query = '''
@@ -105,12 +104,12 @@ class Account:
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             '''
             params = (data['uid'], data['name'], data['cookie'], data['email'], data['encrypted_password'], data['note'], data['is_live'], data['last_checked'], data['proxy_id'], data['session_file'], data['proxy'])
-            self.id = db.execute_update(query, params)
+            self.id = db_instance.execute_update(query, params)
             return self.id
     
-    def delete(self):
+    def delete(self, db_instance):
         if self.id:
-            db.execute_update("DELETE FROM accounts WHERE id = ?", (self.id,))
+            db_instance.execute_update("DELETE FROM accounts WHERE id = ?", (self.id,))
     
     def __str__(self) -> str:
         return f"{self.uid} - {self.name} - {self.status}"

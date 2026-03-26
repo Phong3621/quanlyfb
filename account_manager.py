@@ -1,14 +1,15 @@
-from utils.database import db
+from utils.database import Database
 from models.account import Account
 from datetime import datetime
 
 class AccountManager:
-    def __init__(self):
+    def __init__(self, db_path="database.db"):
+        self.db = Database(db_path)
         self._accounts_cache = []
         self.refresh_cache()
 
     def refresh_cache(self):
-        rows = db.execute_query("SELECT * FROM accounts ORDER BY id DESC")
+        rows = self.db.execute_query("SELECT * FROM accounts ORDER BY id DESC")
         self._accounts_cache = [Account.from_row(row) for row in rows]
 
     @property
@@ -17,14 +18,14 @@ class AccountManager:
 
     def add_account(self, uid, cookie, name, email, password, note):
         acc = Account(uid, name, cookie, email, password, note)
-        acc.save()
+        acc.save(self.db)
         self.refresh_cache()
         return acc
 
     def remove_dead_accounts(self):
         dead = [acc for acc in self._accounts_cache if not acc.is_live]
         for acc in dead:
-            acc.delete()
+            acc.delete(self.db)
         self.refresh_cache()
         return len(dead)
 

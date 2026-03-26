@@ -35,13 +35,14 @@ def main():
     manager = AccountManager()
     
     bot_token = os.getenv('TELEGRAM_BOT_TOKEN', '')
-    admin_chat_id = int(os.getenv('ADMIN_CHAT_ID', '0'))
+    admin_chat_ids_str = os.getenv('ADMIN_CHAT_ID', '0')
+    admin_chat_ids = [int(x.strip()) for x in admin_chat_ids_str.split(',') if x.strip().lstrip('-').isdigit()]
     
     # Kiểm tra chế độ chạy ngầm (Dành cho Docker / VPS Background)
     if os.getenv('HEADLESS_BOT', '').lower() == 'true':
-        if bot_token and admin_chat_id != 0:
+        if bot_token and admin_chat_ids:
             print("🤖 Khởi động Telegram Bot ở chế độ ngầm (Docker mode)...")
-            bot = TelegramBotHandler(manager, bot_token, admin_chat_id)
+            bot = TelegramBotHandler(bot_token, admin_chat_ids)
             bot.run()
         else:
             print("❌ Lỗi: Cần cấu hình TELEGRAM_BOT_TOKEN và ADMIN_CHAT_ID trong .env!")
@@ -74,12 +75,12 @@ def main():
         choice = input("👉 Chọn: ").strip()
         
         if choice == "1":
-            if not bot_token or admin_chat_id == 0:
+            if not bot_token or not admin_chat_ids:
                 print("❌ Cần cấu hình TELEGRAM_BOT_TOKEN và ADMIN_CHAT_ID trong .env!")
                 input("⏎ Nhấn Enter...")
                 continue
             
-            bot = TelegramBotHandler(manager, bot_token, admin_chat_id)
+            bot = TelegramBotHandler(bot_token, admin_chat_ids)
             try:
                 bot.run()
             except KeyboardInterrupt:

@@ -41,21 +41,26 @@ def admin_only(func):
     async def wrapper(self, update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
         user_id = update.effective_user.id
         message = update.effective_message
-        if user_id != self.admin_chat_id:
+        if user_id not in self.admin_chat_ids:
             await message.reply_text("⛔ Cảnh báo: Bạn không có quyền sử dụng công cụ nội bộ này!")
             return
         return await func(self, update, context, *args, **kwargs)
     return wrapper
 
 class TelegramBotHandler:
-    def __init__(self, manager: AccountManager, token: str, admin_chat_id: int):
-        self.manager = manager
+    def __init__(self, token: str, admin_chat_ids: list):
         self.token = token
-        self.admin_chat_id = admin_chat_id
+        self.admin_chat_ids = admin_chat_ids
         self.application = None
         self.waiting_avatar = {}
         self.adding_states = {}
         self.proxy_setting_states = {}
+        self.managers = {}
+
+    def get_manager(self, user_id: int) -> AccountManager:
+        if user_id not in self.managers:
+            self.managers[user_id] = AccountManager(f"database_{user_id}.db")
+        return self.managers[user_id]
 
     async def post_init(self, application: Application):
         from telegram import BotCommand
@@ -91,10 +96,11 @@ class TelegramBotHandler:
             [InlineKeyboardButton("🔧 Cấu hình Proxy", callback_data="set_proxy")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
+        manager = self.get_manager(update.effective_user.id)
         
         await update.message.reply_text(
             "🤖 *Facebook Account Manager PRO*\n\n"
-            f"📊 Đang quản lý: `{len(self.manager.accounts)}` tài khoản\n\n"
+            f"📊 Đang quản lý: `{len(manager.accounts)}` tài khoản\n\n"
             "📌 Sử dụng menu bên dưới 👇",
             parse_mode='Markdown',
             reply_markup=reply_markup
@@ -127,7 +133,8 @@ class TelegramBotHandler:
     @admin_only
     async def check_all(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg = await update.effective_message.reply_text("🔄 Đang kiểm tra... (có thể mất vài phút)")
-        stats = await asyncio.to_thread(self.manager.check_all_accounts)
+        manager = self.get_manager(update.effective_user.id)
+        stats = await asyncio.to_thread(manager.check_all_accounts)
         await msg.edit_text(
             f"✅ *KẾT QUẢ KIỂM TRA*\n\n"
             f"📌 Tổng: `{stats['total']}`\n"
@@ -138,23 +145,25 @@ class TelegramBotHandler:
     
     @admin_only
     async def list_accounts(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        if not self.manager.accounts:
+        manager = self.get_manager(update.effective_user.id)
+        if not manager.accounts:
             await update.effective_message.reply_text("📭 Chưa có tài khoản nào.")
             return
         
         text = "📋 *DANH SÁCH TÀI KHOẢN*\n\n"
-        for i, acc in enumerate(self.manager.accounts[:15], 1):
+        for i, acc in enumerate(manager.accounts[:15], 1):
             text += f"{i}. `{acc.uid}` - {acc.name[:20]}\n"
             text += f"   📊 {acc.status}\n\n"
         
-        if len(self.manager.accounts) > 15:
-            text += f"... và {len(self.manager.accounts) - 15} tài khoản khác"
+        if len(manager.accounts) > 15:
+            text += f"... và {len(manager.accounts) - 15} tài khoản khác"
         
         await update.effective_message.reply_text(text, parse_mode='Markdown')
     
     @admin_only
     async def stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        stats = self.manager.get_statistics()
+        manager = self.get_manager(update.effective_user.id)
+        stats = manager.get_statistics()
         text = (
             f"📊 *THỐNG KÊ TÀI KHOẢN*\n\n"
             f"📌 Tổng: `{stats['total']}`\n"
@@ -166,17 +175,19 @@ class TelegramBotHandler:
     
     @admin_only
     async def clean_dead(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        removed = await asyncio.to_thread(self.manager.remove_dead_accounts)
+        manager = self.get_manager(update.effective_user.id)
+        removed = await asyncio.to_thread(manager.remove_dead_accounts)
         await update.effective_message.reply_text(f"🗑 Đã xóa `{removed}` tài khoản DIE", parse_mode='Markdown')
     
     @admin_only
     async def export_csv(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.effective_message.reply_text("📁 Đang export...")
-        filename = await asyncio.to_thread(self.manager.export_to_csv)
+        manager = self.get_manager(update.effective_user.id)
+        filename = await asyncio.to_thread(manager.export_to_csv)
         with open(filename, 'rb') as f:
             await update.effective_message.reply_document(
                 document=f, filename=os.path.basename(filename),
-                caption=f"📊 {len(self.manager.accounts)} tài khoản"
+                caption=f"📊 {len(manager.accounts)} tài khoản"
             )
         os.remove(filename)
 
@@ -188,7 +199,8 @@ class TelegramBotHandler:
             return
             
         uid = args[0]
-        acc = await asyncio.to_thread(self.manager.get_account_by_uid, uid)
+        manager = self.get_manager(update.effective_user.id)
+        acc = await asyncio.to_thread(manager.get_account_by_uid, uid)
         if acc:
             await update.effective_message.reply_text(f"✅ *Cookie của {uid}*:\n`{acc.cookie_string}`", parse_mode='Markdown')
         else:
@@ -202,7 +214,8 @@ class TelegramBotHandler:
             return
             
         uid = args[0]
-        acc = await asyncio.to_thread(self.manager.get_account_by_uid, uid)
+        manager = self.get_manager(update.effective_user.id)
+        acc = await asyncio.to_thread(manager.get_account_by_uid, uid)
         if acc:
             msg = await update.effective_message.reply_text(f"🔄 Đang lấy thông tin chi tiết và Token cho `{uid}`...", parse_mode='Markdown')
             token = await asyncio.to_thread(get_token_from_cookie, acc.cookie_string, acc.proxy)
@@ -227,6 +240,7 @@ class TelegramBotHandler:
 
     @admin_only
     async def _process_add_account(self, update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int, proxy_str: str):
+        manager = self.get_manager(user_id)
         input_str = self.adding_states.get(user_id, {}).get('data', '')
         if user_id in self.adding_states:
             del self.adding_states[user_id]
@@ -263,7 +277,7 @@ class TelegramBotHandler:
 
             msg = await update.effective_message.reply_text("🔄 Đang xử lý và lấy thông tin từ Facebook...")
             try:
-                acc = await asyncio.to_thread(self.manager.add_account_from_cookie, cookie_str, email, password, note, proxy_str)
+                acc = await asyncio.to_thread(manager.add_account_from_cookie, cookie_str, email, password, note, proxy_str)
                 
                 success_text = f"✅ Đã thêm tài khoản thành công!\n\n📌 UID: `{acc.uid}`\n👤 Tên: `{acc.name}`"
                 if email: success_text += f"\n📧 TK: `{email}`"
@@ -291,15 +305,15 @@ class TelegramBotHandler:
                     if uid:
                         cookie_dict = {c['name']: c['value'] for c in cookies_list}
                         
-                        acc = await asyncio.to_thread(self.manager.get_account_by_uid, uid)
+                        acc = await asyncio.to_thread(manager.get_account_by_uid, uid)
                         if acc:
                             update_kwargs = dict(cookie=cookie_dict, name=name, email=email, password=password, note=note)
                             if proxy_str: update_kwargs['proxy'] = proxy_str
-                            await asyncio.to_thread(self.manager.update_account, acc.id, **update_kwargs)
+                            await asyncio.to_thread(manager.update_account, acc.id, **update_kwargs)
                             success_text = f"✅ Đã CẬP NHẬT Cookie thành công!\n\n📌 UID: `{uid}`\n👤 Tên: `{name}`"
                             if proxy_str: success_text += f"\n🌐 Proxy: `{proxy_str}`"
                         else:
-                            acc = await asyncio.to_thread(self.manager.add_account, uid, cookie_dict, name, email, password, note, proxy_str)
+                            acc = await asyncio.to_thread(manager.add_account, uid, cookie_dict, name, email, password, note, proxy_str)
                             success_text = f"✅ Đã THÊM tài khoản mới thành công!\n\n📌 UID: `{acc.uid}`\n👤 Tên: `{acc.name}`"
                             if proxy_str: success_text += f"\n🌐 Proxy: `{proxy_str}`"
                             
@@ -345,7 +359,8 @@ class TelegramBotHandler:
             return
             
         uid = args[0]
-        success = await asyncio.to_thread(self.manager.delete_account_by_uid, uid)
+        manager = self.get_manager(update.effective_user.id)
+        success = await asyncio.to_thread(manager.delete_account_by_uid, uid)
         if success:
             await update.effective_message.reply_text(f"✅ Đã xóa thành công tài khoản có UID: `{uid}`", parse_mode='Markdown')
         else:
@@ -360,6 +375,8 @@ class TelegramBotHandler:
         msg = await update.effective_message.reply_text("🔄 Đang tải và xử lý file `.txt`, vui lòng chờ...", parse_mode='Markdown')
         
         try:
+            user_id = update.effective_user.id
+            manager = self.get_manager(user_id)
             file = await context.bot.get_file(document.file_id)
             file_content = await file.download_as_bytearray()
             lines = file_content.decode('utf-8', errors='ignore').splitlines()
@@ -389,7 +406,7 @@ class TelegramBotHandler:
                     if len(parts) > 2: note = "2FA: " + parts[2] if len(parts) == 3 else " | ".join(parts[2:])
 
                 try:
-                    await asyncio.to_thread(self.manager.add_account_from_cookie, cookie_str, email, password, note)
+                    await asyncio.to_thread(manager.add_account_from_cookie, cookie_str, email, password, note)
                     success_count += 1
                 except Exception:
                     error_count += 1
@@ -406,7 +423,8 @@ class TelegramBotHandler:
             return
             
         uid = args[0]
-        acc = await asyncio.to_thread(self.manager.get_account_by_uid, uid)
+        manager = self.get_manager(update.effective_user.id)
+        acc = await asyncio.to_thread(manager.get_account_by_uid, uid)
         if acc:
             msg = await update.effective_message.reply_text(f"🔄 Đang lấy token cho UID `{uid}`...", parse_mode='Markdown')
             token = await asyncio.to_thread(get_token_from_cookie, acc.cookie_string, acc.proxy)
@@ -425,7 +443,8 @@ class TelegramBotHandler:
             return
             
         uid = args[0]
-        acc = await asyncio.to_thread(self.manager.get_account_by_uid, uid)
+        manager = self.get_manager(update.effective_user.id)
+        acc = await asyncio.to_thread(manager.get_account_by_uid, uid)
         if not acc:
             await update.effective_message.reply_text(f"❌ Không tìm thấy tài khoản với UID: `{uid}`", parse_mode='Markdown')
             return
@@ -453,7 +472,8 @@ class TelegramBotHandler:
             await update.effective_message.reply_text("⚠️ Bot đã nhận được ảnh nhưng không biết bạn muốn đổi avatar cho UID nào.\n👉 Vui lòng dùng lệnh `/avatar <uid>` trước, hoặc gửi ảnh kèm caption `/avatar <uid>`.", parse_mode='Markdown')
             return
             
-        acc = await asyncio.to_thread(self.manager.get_account_by_uid, uid)
+        manager = self.get_manager(user_id)
+        acc = await asyncio.to_thread(manager.get_account_by_uid, uid)
         if not acc:
             await update.effective_message.reply_text(f"❌ Không tìm thấy tài khoản với UID: `{uid}`", parse_mode='Markdown')
             return
@@ -491,7 +511,8 @@ class TelegramBotHandler:
             return
             
         uid = args[0]
-        acc = await asyncio.to_thread(self.manager.get_account_by_uid, uid)
+        manager = self.get_manager(update.effective_user.id)
+        acc = await asyncio.to_thread(manager.get_account_by_uid, uid)
         if not acc:
             await update.effective_message.reply_text(f"❌ Không tìm thấy tài khoản với UID: `{uid}`", parse_mode='Markdown')
             return
@@ -540,7 +561,8 @@ class TelegramBotHandler:
             
             del self.proxy_setting_states[user_id]
 
-            acc = await asyncio.to_thread(self.manager.get_account_by_uid, uid)
+            manager = self.get_manager(user_id)
+            acc = await asyncio.to_thread(manager.get_account_by_uid, uid)
             if not acc:
                 await update.effective_message.reply_text(f"❌ Lỗi: Không tìm thấy tài khoản `{uid}` để cập nhật.", parse_mode='Markdown')
                 return
@@ -555,7 +577,7 @@ class TelegramBotHandler:
             else:
                 proxy_str = f"{prefix}{text}"
             
-            await asyncio.to_thread(self.manager.update_account, acc.id, proxy=proxy_str)
+            await asyncio.to_thread(manager.update_account, acc.id, proxy=proxy_str)
             await update.effective_message.reply_text(
                 f"✅ Đã cập nhật proxy thành công cho UID `{uid}`!\n\n"
                 f"🌐 Proxy mới: `{proxy_str}`",
@@ -634,13 +656,14 @@ class TelegramBotHandler:
             uid = parts[2]
             user_id = update.effective_user.id
 
-            acc = await asyncio.to_thread(self.manager.get_account_by_uid, uid)
+            manager = self.get_manager(user_id)
+            acc = await asyncio.to_thread(manager.get_account_by_uid, uid)
             if not acc:
                 await query.edit_message_text(f"❌ Không tìm thấy tài khoản với UID: `{uid}`", parse_mode='Markdown')
                 return
 
             if action == "remove":
-                await asyncio.to_thread(self.manager.update_account, acc.id, proxy="")
+                await asyncio.to_thread(manager.update_account, acc.id, proxy="")
                 await query.edit_message_text(f"✅ Đã xóa proxy thành công cho UID `{uid}`.", parse_mode='Markdown')
             else:
                 self.proxy_setting_states[user_id] = {'uid': uid, 'proxy_type': action}

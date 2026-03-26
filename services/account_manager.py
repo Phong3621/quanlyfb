@@ -3,7 +3,7 @@ import re
 import csv
 import concurrent.futures
 from datetime import datetime
-from utils.database import db
+from utils.database import Database
 from models.account import Account
 from services.uid_checker import UIDChecker
 
@@ -113,13 +113,14 @@ def get_name_with_cookie(uid: str, cookie_string: str, proxy: str = None) -> str
 class AccountManager:
     """Quản lý tài khoản Facebook"""
     
-    def __init__(self):
+    def __init__(self, db_path="database.db"):
+        self.db = Database(db_path)
         self._accounts_cache = []
         self.refresh_cache()
 
     def refresh_cache(self):
         """Refresh cache từ database"""
-        rows = db.execute_query("SELECT * FROM accounts ORDER BY id DESC")
+        rows = self.db.execute_query("SELECT * FROM accounts ORDER BY id DESC")
         self._accounts_cache = [Account.from_row(row) for row in rows]
 
     @property
@@ -149,7 +150,7 @@ class AccountManager:
             note=note,
             proxy=proxy
         )
-        acc.save()
+        acc.save(self.db)
         self.refresh_cache()
         return acc
 
@@ -204,7 +205,7 @@ class AccountManager:
             if hasattr(acc, key):
                 setattr(acc, key, value)
         
-        acc.save()
+        acc.save(self.db)
         self.refresh_cache()
         return True
 
@@ -217,7 +218,7 @@ class AccountManager:
                 break
         
         if acc:
-            acc.delete()
+            acc.delete(self.db)
             self.refresh_cache()
             return True
         return False
@@ -226,7 +227,7 @@ class AccountManager:
         """Xóa tài khoản theo UID"""
         acc = self.get_account_by_uid(uid)
         if acc:
-            acc.delete()
+            acc.delete(self.db)
             self.refresh_cache()
             return True
         return False
@@ -235,7 +236,7 @@ class AccountManager:
         """Xóa tất cả tài khoản DIE"""
         dead = [acc for acc in self._accounts_cache if not acc.is_live]
         for acc in dead:
-            acc.delete()
+            acc.delete(self.db)
             
         self.refresh_cache()
         return len(dead)
@@ -266,7 +267,7 @@ class AccountManager:
             if status is not None and acc.is_live != status:
                 acc.is_live = status
                 acc.last_checked = datetime.now().isoformat()
-                acc.save()
+                acc.save(self.db)
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             executor.map(_check_acc, self._accounts_cache)
@@ -284,7 +285,7 @@ class AccountManager:
         is_live = UIDChecker.check_live(uid, proxy)
         acc.is_live = is_live
         acc.last_checked = datetime.now().isoformat()
-        acc.save()
+        acc.save(self.db)
         self.refresh_cache()
         
         return is_live
@@ -336,7 +337,7 @@ class AccountManager:
                         email=email,
                         note=note
                     )
-                    acc.save()
+                    acc.save(self.db)
                     imported += 1
             
             self.refresh_cache()

@@ -47,5 +47,3 @@ class Database:
             cursor.execute(query, params)
             conn.commit()
             return cursor.lastrowid
-
-db = Database()
