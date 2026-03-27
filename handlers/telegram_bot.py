@@ -389,27 +389,56 @@ class TelegramBotHandler:
                 if not line:
                     continue
                     
-                email, password, note, cookie_str = "", "", "", line
+                if "c_user=" in line:
+                    email, password, note, cookie_str = "", "", "", line
 
-                if "|" in line:
-                    parts = [p.strip() for p in line.split("|") if p.strip()]
-                    cookie_idx = next((i for i, p in enumerate(parts) if "c_user=" in p), -1)
+                    if "|" in line:
+                        parts = [p.strip() for p in line.split("|") if p.strip()]
+                        cookie_idx = next((i for i, p in enumerate(parts) if "c_user=" in p), -1)
+                                
+                        if cookie_idx != -1:
+                            cookie_str = parts.pop(cookie_idx)
+                        elif parts:
+                            cookie_str = max(parts, key=len)
+                            parts.remove(cookie_str)
                             
-                    if cookie_idx != -1:
-                        cookie_str = parts.pop(cookie_idx)
-                    elif parts:
-                        cookie_str = max(parts, key=len)
-                        parts.remove(cookie_str)
-                        
-                    if len(parts) > 0: email = parts[0]
-                    if len(parts) > 1: password = parts[1]
-                    if len(parts) > 2: note = "2FA: " + parts[2] if len(parts) == 3 else " | ".join(parts[2:])
+                        if len(parts) > 0: email = parts[0]
+                        if len(parts) > 1: password = parts[1]
+                        if len(parts) > 2: note = "2FA: " + parts[2] if len(parts) == 3 else " | ".join(parts[2:])
 
-                try:
-                    await asyncio.to_thread(manager.add_account_from_cookie, cookie_str, email, password, note)
-                    success_count += 1
-                except Exception:
-                    error_count += 1
+                    try:
+                        await asyncio.to_thread(manager.add_account_from_cookie, cookie_str, email, password, note)
+                        success_count += 1
+                    except Exception:
+                        error_count += 1
+                else:
+                    parts = [p.strip() for p in line.split("|") if p.strip()]
+                    if len(parts) >= 2:
+                        email = parts[0]
+                        password = parts[1]
+                        secret_2fa = parts[2] if len(parts) >= 3 else ""
+                        note = f"2FA: {secret_2fa}" if secret_2fa else ""
+                        
+                        try:
+                            from services.auto_login import run_auto_login
+                            cookies_list, uid, name = await asyncio.to_thread(run_auto_login, email, password, secret_2fa, "")
+                            
+                            if uid:
+                                cookie_dict = {c['name']: c['value'] for c in cookies_list}
+                                
+                                acc = await asyncio.to_thread(manager.get_account_by_uid, uid)
+                                if acc:
+                                    update_kwargs = dict(cookie=cookie_dict, name=name, email=email, password=password, note=note)
+                                    await asyncio.to_thread(manager.update_account, acc.id, **update_kwargs)
+                                else:
+                                    await asyncio.to_thread(manager.add_account, uid, cookie_dict, name, email, password, note, "")
+                                success_count += 1
+                            else:
+                                error_count += 1
+                        except Exception:
+                            error_count += 1
+                    else:
+                        error_count += 1
                     
             await msg.edit_text(f"✅ *Đã xử lý xong file txt!*\n\n✔️ Thành công: `{success_count}`\n❌ Thất bại/Trùng: `{error_count}`", parse_mode='Markdown')
         except Exception as e:
