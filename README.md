@@ -30,14 +30,9 @@ Công cụ quản lý tài khoản Facebook chuyên nghiệp với hỗ trợ đ
 
 ### Thư viện cần thiết
 
-Bạn cần cài đặt các thư viện Python sau:
+Bạn cần cài đặt các thư viện Python sau (webdriver-manager sẽ tự động quản lý chromedriver):
 ```bash
-pip install python-dotenv playwright pyotp
-```
-
-Sau đó cài đặt trình duyệt cho Playwright (dùng cho chức năng Auto Login):
-```bash
-playwright install chromium
+pip install python-dotenv selenium webdriver-manager pyotp
 ```
 
 ---

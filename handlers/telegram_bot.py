@@ -321,7 +321,7 @@ class TelegramBotHandler:
                     else:
                         await msg.edit_text("❌ Auto login thất bại hoặc tài khoản đã bị checkpoint nặng!", parse_mode='Markdown')
                 except ImportError:
-                    await msg.edit_text("❌ Lỗi: Chưa cài đặt thư viện Playwright.\n👉 `pip install playwright pyotp && playwright install chromium`", parse_mode='Markdown')
+                    await msg.edit_text("❌ Lỗi: Chưa cài đặt thư viện Selenium.\n👉 `pip install selenium webdriver-manager pyotp`", parse_mode='Markdown')
                 except Exception as e:
                     await msg.edit_text(f"❌ Lỗi xử lý Auto Login: {str(e)}")
             else:

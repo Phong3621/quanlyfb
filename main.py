@@ -265,8 +265,8 @@ def main():
                     else:
                         print("\n❌ Đăng nhập thất bại hoặc tài khoản đã bị checkpoint nặng!")
                 except ImportError:
-                    print("\n❌ Lỗi: Bạn chưa cài đặt thư viện cần thiết cho chức năng này.")
-                    print("👉 Vui lòng chạy lệnh: pip install playwright pyotp && playwright install chromium")
+                    print("\n❌ Lỗi: Bạn chưa cài đặt thư viện Selenium/Webdriver.")
+                    print("👉 Vui lòng chạy lệnh: pip install selenium webdriver-manager pyotp")
                 except Exception as e:
                     print(f"\n❌ Lỗi xử lý: {str(e)}")
             else:

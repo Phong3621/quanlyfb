@@ -1,4 +1,8 @@
-from playwright.sync_api import sync_playwright
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException
 import time
 import os
 
@@ -19,80 +23,84 @@ def convert_cookie(raw):
         })
     return cookies
 
-# ===== Click avatar =====
-def click_avatar(page):
+# ===== Click avatar (Selenium) =====
+def click_avatar(driver):
     selectors = [
-        '[aria-label*="profile picture" i]',
-        '[aria-label*="ảnh đại diện" i]',
-        'img[alt*="profile" i]',
+        '[aria-label*="profile picture"]',
+        '[aria-label*="ảnh đại diện"]',
+        'img[alt*="profile"]',
         '[data-testid="profile-picture"]'
     ]
 
     for s in selectors:
         try:
-            el = page.locator(s).first
-            if el.is_visible(timeout=5000):
-                el.click()
-                print("✅ Click avatar")
-                return True
+            el = WebDriverWait(driver, 5).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, s))
+            )
+            el.click()
+            print("✅ Click avatar")
+            return True
         except:
             pass
 
     print("❌ Không thấy avatar")
     return False
 
-# ===== Click Choose =====
-def click_choose(page):
-    selectors = [
-        'text=Choose profile picture',
-        'text=Chọn ảnh đại diện',
-        'text=Update profile picture',
-        'text=Edit profile picture'
+# ===== Click Choose (Selenium) =====
+def click_choose(driver):
+    xpaths = [
+        "//*[text()='Choose profile picture']",
+        "//*[text()='Chọn ảnh đại diện']",
+        "//*[text()='Update profile picture']",
+        "//*[text()='Edit profile picture']"
     ]
 
-    for s in selectors:
+    for xp in xpaths:
         try:
-            btn = page.locator(s).first
-            if btn.is_visible(timeout=5000):
-                btn.click()
-                print(f"✅ Click: {s}")
-                return True
+            btn = WebDriverWait(driver, 5).until(
+                EC.element_to_be_clickable((By.XPATH, xp))
+            )
+            btn.click()
+            print(f"✅ Click: Choose button")
+            return True
         except:
             pass
 
     print("❌ Không thấy Choose")
     return False
 
-# ===== Click Upload photo =====
-def click_upload_photo(page):
-    selectors = [
-        'text=Upload photo',
-        'text=Tải ảnh lên',
-        'text=Upload from computer',
-        'button:has-text("Upload")'
+# ===== Click Upload photo (Selenium) =====
+def click_upload_photo(driver):
+    xpaths = [
+        "//*[text()='Upload photo']",
+        "//*[text()='Tải ảnh lên']",
+        "//*[text()='Upload from computer']",
+        "//button[contains(., 'Upload')]"
     ]
 
-    for s in selectors:
+    for xp in xpaths:
         try:
-            btn = page.locator(s).first
-            if btn.is_visible(timeout=5000):
-                btn.click()
-                print("✅ Click Upload photo")
-                return True
+            btn = WebDriverWait(driver, 5).until(
+                EC.element_to_be_clickable((By.XPATH, xp))
+            )
+            btn.click()
+            print("✅ Click Upload photo")
+            return True
         except:
             pass
 
     print("❌ Không thấy Upload photo")
     return False
 
-# ===== Upload file (FIXED) =====
-def upload_file(page, path):
+# ===== Upload file (Selenium) =====
+def upload_file(driver, path):
     try:
         print("🚀 Upload không mở popup...")
+        abs_path = os.path.abspath(path)
 
         # tìm input file
-        inputs = page.locator('input[type="file"]')
-        count = inputs.count()
+        inputs = driver.find_elements(By.CSS_SELECTOR, 'input[type="file"]')
+        count = len(inputs)
 
         print(f"📁 Tìm thấy {count} input")
 
@@ -102,16 +110,16 @@ def upload_file(page, path):
 
         # ưu tiên input cuối (avatar)
         try:
-            inputs.last.set_input_files(path)
+            inputs[-1].send_keys(abs_path)
             print("✅ Upload avatar (no popup)")
             return True
-        except:
-            pass
+        except Exception as e:
+            print(f"⚠️ Lỗi khi upload với input cuối: {e}")
 
         # fallback
-        for i in range(count):
+        for i, input_el in enumerate(inputs):
             try:
-                inputs.nth(i).set_input_files(path)
+                input_el.send_keys(abs_path)
                 print(f"✅ Upload fallback #{i}")
                 return True
             except:
@@ -123,25 +131,26 @@ def upload_file(page, path):
         print("❌ Upload lỗi:", e)
         return False
 
-# ===== Click Save =====
-def click_save(page):
-    selectors = [
-        'text=Save',
-        'text=Lưu',
-        'text=Done',
-        'text=Xong',
-        'button:has-text("Save")',
-        'button:has-text("Lưu")'
+# ===== Click Save (Selenium) =====
+def click_save(driver):
+    xpaths = [
+        "//*[text()='Save']",
+        "//*[text()='Lưu']",
+        "//*[text()='Done']",
+        "//*[text()='Xong']",
+        "//button[contains(., 'Save')]",
+        "//button[contains(., 'Lưu')]"
     ]
 
     for _ in range(10):
-        for s in selectors:
+        for s in xpaths:
             try:
-                btn = page.locator(s).first
-                if btn.is_visible(timeout=2000):
-                    btn.click()
-                    print(f"✅ Click: {s}")
-                    return True
+                btn = WebDriverWait(driver, 2).until(
+                    EC.element_to_be_clickable((By.XPATH, s))
+                )
+                btn.click()
+                print(f"✅ Click: {s}")
+                return True
             except:
                 pass
         time.sleep(1)
@@ -149,90 +158,101 @@ def click_save(page):
     print("⚠️ Không thấy nút save")
     return False
 
-# ================== PLAYWRIGHT PROXY PARSER ==================
-def parse_playwright_proxy(proxy_str):
-    if not proxy_str: return None
-    import urllib.parse
-    try:
-        if not proxy_str.startswith(('http://', 'https://', 'socks5://')):
-            proxy_str = 'http://' + proxy_str
-        parsed = urllib.parse.urlparse(proxy_str)
-        res = {"server": f"{parsed.scheme}://{parsed.hostname}:{parsed.port}"}
-        if parsed.username: res["username"] = parsed.username
-        if parsed.password: res["password"] = parsed.password
-        return res
-    except:
-        return {"server": proxy_str}
-
 # ===== MAIN EXPORT FOR BOT =====
 def run_update_avatar(cookie_string, avatar_path, headless_mode=True, max_retries=3, proxy=None):
     if not os.path.exists(avatar_path):
         print(f"❌ Không tìm thấy ảnh: {avatar_path}")
         return False
-    
-    pw_proxy = parse_playwright_proxy(proxy)
+
+    # Selenium setup
+    from selenium.webdriver.chrome.service import Service as ChromeService
+    try:
+        from webdriver_manager.chrome import ChromeDriverManager
+        use_webdriver_manager = True
+    except ImportError:
+        use_webdriver_manager = False
+        print("⚠️ 'webdriver-manager' not found. Please ensure 'chromedriver' is in your PATH.")
+        print("   Suggestion: pip install webdriver-manager")
+
+    options = webdriver.ChromeOptions()
+    options.add_argument("--disable-notifications")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+    if headless_mode:
+        options.add_argument("--headless")
+    if proxy:
+        options.add_argument(f'--proxy-server={proxy}')
 
     try:
-        launch_args = []
-
         for attempt in range(max_retries):
             print(f"\n🔄 Thử nghiệm lần {attempt + 1}/{max_retries}")
+            driver = None
             try:
-                with sync_playwright() as p:
-                    browser = p.chromium.launch(headless=headless_mode, slow_mo=100, args=launch_args, proxy=pw_proxy)
-                    context = browser.new_context(
-                        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36"
-                    )
+                if use_webdriver_manager:
+                    service = ChromeService(ChromeDriverManager().install())
+                    driver = webdriver.Chrome(service=service, options=options)
+                else:
+                    driver = webdriver.Chrome(options=options)
 
-                    context.add_cookies(convert_cookie(cookie_string))
-                    page = context.new_page()
+                print("🌐 Đang vào Facebook...")
+                driver.get("https://www.facebook.com/")
 
-                    print("🌐 Đang vào Facebook...")
-                    page.goto("https://www.facebook.com/", timeout=60000)
-                    time.sleep(5)
+                cookies = convert_cookie(cookie_string)
+                for cookie in cookies:
+                    driver.add_cookie(cookie)
 
-                    # Kiểm tra login
-                    if "login" in page.url:
-                        print("❌ Cookie DIE!")
-                        browser.close()
-                        return False
+                driver.get("https://www.facebook.com/")
+                time.sleep(5)
 
-                    print("✅ Cookie LIVE")
-                    page.goto("https://www.facebook.com/me", timeout=60000)
-                    time.sleep(5)
+                # Kiểm tra login
+                if "login" in driver.current_url:
+                    print("❌ Cookie DIE!")
+                    driver.quit()
+                    return False
 
-                    success = False
-                    if click_avatar(page):
+                print("✅ Cookie LIVE")
+                driver.get("https://www.facebook.com/me")
+                time.sleep(5)
+
+                success = False
+                if click_avatar(driver):
+                    time.sleep(2)
+                    if click_choose(driver):
                         time.sleep(2)
-                        if click_choose(page):
+                        if click_upload_photo(driver):
                             time.sleep(2)
-                            if click_upload_photo(page):
-                                time.sleep(2)
-                                if upload_file(page, avatar_path):
-                                    time.sleep(3)
-                                    click_save(page)
+                            if upload_file(driver, avatar_path):
+                                time.sleep(3)
+                                if click_save(driver):
                                     time.sleep(3)
                                     print("✅ UP AVATAR DONE")
                                     success = True
                                 else:
-                                    print("❌ Upload thất bại")
+                                    print("❌ Save thất bại")
                             else:
-                                print("❌ Không click được Upload photo")
+                                print("❌ Upload thất bại")
                         else:
-                            print("❌ Không click được Choose")
+                            print("❌ Không click được Upload photo")
                     else:
-                        print("❌ Không click được avatar")
+                        print("❌ Không click được Choose")
+                else:
+                    print("❌ Không click được avatar")
 
-                    browser.close()
-                    if success:
-                        return True
+                driver.quit()
+                if success:
+                    return True
             except Exception as e:
                 print(f"❌ Lỗi: {e}")
+                if driver:
+                    driver.quit()
                 
             time.sleep(2)
 
-        return False
     finally:
         if os.path.exists(avatar_path):
             os.remove(avatar_path)
             print(f"🗑️ Đã xóa file ảnh tạm: {avatar_path}")
+
+    return False
